@@ -1,4 +1,4 @@
-# Contributing
+# Contributing-testing
 
 This repository is a teaching sample, but it follows a real contribution flow so
 you can practise it during the lab.
