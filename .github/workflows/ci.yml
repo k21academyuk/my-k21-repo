@@ -1,0 +1,101 @@
+# .github/workflows/ci.yml
+# ---------------------------------------------------------------------------
+# Continuous Integration
+#
+# Maps to training modules:
+#   - Module 4 (Workflows, Jobs & Steps)  -> the structure below
+#   - Module 5 (Triggering on Push / PR)  -> the `on:` block
+#   - Caching & artifacts                 -> setup-node cache + upload-artifact
+#
+# What it does: on every push to main and every pull request targeting main,
+# it lints, tests across several Node versions, then builds the site.
+# ---------------------------------------------------------------------------
+name: CI
+
+# WHEN does this run? (Module 5)
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least-privilege permissions for the automatic GITHUB_TOKEN (Module 6).
+# CI only needs to read the repository contents.
+permissions:
+  contents: read
+
+jobs:
+  # ----- Job 1: Lint -------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest # a GitHub-hosted runner
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm' # caches the npm download folder between runs
+
+      - name: Install dependencies
+        run: npm ci # reproducible install from package-lock.json
+
+      - name: Run linter
+        run: npm run lint
+
+  # ----- Job 2: Test (matrix) ---------------------------------------------
+  # The same steps run once per Node version, in parallel. (Module 4 — matrix)
+  test:
+    name: Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # let every version finish even if one fails
+      matrix:
+        node-version: ['18', '20', '22']
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  # ----- Job 3: Build ------------------------------------------------------
+  # `needs:` makes this wait until lint AND test succeed. (Module 4 — job deps)
+  build:
+    name: Build site
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Save the built site so other workflows / runs can download it. (artifacts)
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-dist
+          path: dist/
+          retention-days: 7

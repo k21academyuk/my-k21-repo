@@ -1,0 +1,57 @@
+# .github/workflows/scheduled.yml
+# ---------------------------------------------------------------------------
+# Scheduled (Nightly) Checks
+#
+# Maps to training modules:
+#   - Module 5 (Triggering on Schedule) -> the `schedule` + `cron` block
+#   - Manual triggers                   -> `workflow_dispatch` with inputs
+#
+# What it does: runs the test suite on a timer (and on demand), then prints a
+# short health report. Use this pattern for nightly regression runs, scheduled
+# dependency audits, link checks, data refreshes, etc.
+# ---------------------------------------------------------------------------
+name: Nightly Checks
+
+on:
+  schedule:
+    # cron is:  minute hour day-of-month month day-of-week   (always UTC)
+    #            0      2    *            *     *
+    # -> every day at 02:00 UTC. https://crontab.guru helps you read these.
+    - cron: '0 2 * * *'
+
+  # Lets you run the workflow by hand from the Actions tab, with an input.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you running this manually?'
+        required: false
+        default: 'manual run'
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Health check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run tests
+        run: npm test
+
+      - name: Report
+        env:
+          # github.event.inputs.reason only exists for manual runs; default for cron.
+          REASON: ${{ github.event.inputs.reason || 'scheduled run' }}
+        run: |
+          echo "Nightly health check complete."
+          echo "Trigger : ${{ github.event_name }}"
+          echo "Reason  : $REASON"
+          echo "Time    : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"

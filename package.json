@@ -1,0 +1,25 @@
+{
+  "name": "string-toolkit",
+  "version": "1.0.0",
+  "description": "A small string utility library — the sample project for the Git, GitHub & GitHub Actions training.",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.13.0"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "node scripts/lint.js",
+    "build": "node scripts/build.js",
+    "start": "node -e \"const t=require('./src');console.log('string-toolkit loaded:',Object.keys(t).join(', '))\""
+  },
+  "keywords": [
+    "string",
+    "utility",
+    "github-actions",
+    "ci-cd",
+    "training"
+  ],
+  "author": "Gennoor Tech",
+  "license": "MIT",
+  "//": "This project has no runtime or dev dependencies on purpose, so it runs immediately after cloning. When you add real dependencies, list them below and they will be installed by `npm ci` and cached automatically in CI."
+}

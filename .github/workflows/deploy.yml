@@ -1,0 +1,106 @@
+# .github/workflows/deploy.yml
+# ---------------------------------------------------------------------------
+# Deploy (Staging -> Production)
+#
+# Maps to training modules:
+#   - Module 6 (Secrets & Permissions)        -> secrets.* + scoped permissions
+#   - Module 7 (Environments & Deploy Gates)  -> environment: + approval gate
+#   - Caching, artifacts, concurrency         -> supporting patterns
+#
+# Flow:
+#   build  ->  deploy-staging (GitHub Pages)  ->  deploy-production (GATED)
+#
+# `deploy-production` targets a protected "production" environment. Add a
+# required reviewer to that environment in repo Settings so this job pauses
+# for manual approval — that is your deployment gate. (See Lab 7.)
+# ---------------------------------------------------------------------------
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permissions needed to publish to GitHub Pages via OIDC. (Module 6)
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment per branch at a time; don't cancel an in-flight deploy.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ----- Build the site and package it for Pages --------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # ----- Staging: deploy to GitHub Pages automatically --------------------
+  deploy-staging:
+    name: Deploy to staging (Pages)
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ----- Production: GATED deployment using a secret ----------------------
+  deploy-production:
+    name: Deploy to production
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    # Pointing at this environment means the job inherits the environment's
+    # protection rules (required reviewers, wait timer, branch limits) AND its
+    # environment-scoped secrets. This is where the deployment gate lives.
+    environment:
+      name: production
+      url: https://www.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Deploy to production
+        # The secret is injected as an env var and is automatically masked in logs.
+        # NEVER echo a secret directly. (Module 6 — security)
+        env:
+          DEPLOY_TOKEN: ${{ secrets.PROD_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "$DEPLOY_TOKEN" ]; then
+            echo "::warning::PROD_DEPLOY_TOKEN is not set. Add it to the 'production' environment (Lab 6/7). Continuing with a simulated deploy."
+          else
+            echo "Found a deploy token of length ${#DEPLOY_TOKEN} (value hidden)."
+          fi
+          echo "🚀 Deploying $(node -p "require('./dist/build-info.json').version") to production..."
+          echo "Shipped $(wc -c < dist/index.html) bytes of site. Done."

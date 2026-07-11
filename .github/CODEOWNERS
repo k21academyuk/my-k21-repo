@@ -1,0 +1,18 @@
+# CODEOWNERS — automatic reviewers (Module 3)
+# https://docs.github.com/articles/about-code-owners
+#
+# When a PR touches a matching path, the listed owners are requested for review
+# automatically. Combine this with a branch protection rule ("Require review
+# from Code Owners") to make it mandatory.
+#
+# Replace the placeholder handles below with real GitHub usernames or teams,
+# e.g. @your-org/maintainers. Lines are last-match-wins.
+
+# Default owner for everything in the repo
+*                   @your-github-username
+
+# The library source needs a maintainer's eyes
+/src/               @your-github-username
+
+# Workflow changes are sensitive — require the DevOps owner
+/.github/workflows/ @your-github-username

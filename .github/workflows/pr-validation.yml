@@ -1,0 +1,94 @@
+# .github/workflows/pr-validation.yml
+# ---------------------------------------------------------------------------
+# Pull Request Validation
+#
+# Maps to training modules:
+#   - Module 3 (Pull Requests & Code Reviews) -> automated PR gatekeeping
+#   - Module 5 (Triggering on PR)             -> `pull_request` event types
+#   - Module 6 (Permissions & GITHUB_TOKEN)   -> writing a comment back to the PR
+#
+# What it does: checks that the PR title follows Conventional Commits, then
+# posts (or updates) a friendly summary comment on the pull request.
+# ---------------------------------------------------------------------------
+name: PR Validation
+
+on:
+  pull_request:
+    # Re-run when the PR is opened, its title/body is edited, or new commits land.
+    types: [opened, edited, synchronize, reopened]
+
+# This workflow needs to WRITE a comment, so it asks for pull-requests: write.
+# Everything else stays read-only. (Module 6 — least privilege)
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate PR
+    runs-on: ubuntu-latest
+    steps:
+      # Read the PR title from the event context via an environment variable.
+      # Passing it through `env:` (instead of inlining ${{ }} into the script)
+      # is the safe pattern — it avoids shell-injection from untrusted input.
+      - name: Check PR title (Conventional Commits)
+        id: title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "PR title: $PR_TITLE"
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+'
+          if echo "$PR_TITLE" | grep -Eq "$pattern"; then
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+            echo "✅ Title follows Conventional Commits."
+          else
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+            echo "::error::PR title must follow Conventional Commits, e.g. 'feat: add slugify helper'"
+            exit 1
+          fi
+
+      # Post a summary comment using the automatic GITHUB_TOKEN.
+      # `if: always()` lets it run even when the previous step failed,
+      # so contributors always get feedback.
+      - name: Comment on the PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const passed = '${{ steps.title.outputs.result }}' === 'pass';
+            const body = [
+              '### PR Validation',
+              '',
+              passed
+                ? '✅ **Title check passed.** Thanks for following Conventional Commits!'
+                : '❌ **Title check failed.** Please use a format like `feat: ...` or `fix: ...`.',
+              '',
+              `_Triggered by \`${context.eventName}\` on commit \`${context.sha.slice(0,7)}\`._`,
+            ].join('\n');
+
+            // Find an existing bot comment to update, so we don't spam the thread.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const marker = '### PR Validation';
+            const existing = comments.find(
+              (c) => c.user.type === 'Bot' && c.body.startsWith(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
